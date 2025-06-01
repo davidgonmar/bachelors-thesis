@@ -1,0 +1,4 @@
+torch>=2.0.0,<3.0.0
+numpy>=1.21
+tqdm>=4.66.0
+git+https://github.com/davidgonmar/compress.git@7124ed03f2cc683cb281bc1c407d05b9bd412dcf
