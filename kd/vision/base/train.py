@@ -93,9 +93,7 @@ def elementwise_gaussian_nll(
     return nll.mean()
 
 
-parser = argparse.ArgumentParser(
-    description="CIFAR‑10 QAT with variational feature‑KD using conv+linear decoders"
-)
+parser = argparse.ArgumentParser()
 parser.add_argument("--nbits", type=int, required=True)
 parser.add_argument("--alpha", type=float, required=True)
 parser.add_argument("--epochs", type=int, default=200)
@@ -228,6 +226,7 @@ for epoch in range(1, args.epochs + 1):
     student.train()
     [d.train() for d in decoders.values()]
     run_loss = run_ce = run_kd = 0.0
+    n_samples = 0
 
     for batch_idx, (images, labels) in enumerate(
         tqdm(train_loader, desc=f"Epoch {epoch}/{args.epochs}")
@@ -239,61 +238,62 @@ for epoch in range(1, args.epochs + 1):
             teacher(images)
         logits_s = student(images)
 
-        ce_loss = criterion_ce(logits_s, labels)
-        kd_loss = torch.stack(
-            [
-                elementwise_gaussian_nll(
-                    decoders[name](
-                        student_feats[name]
-                        if name != "linear"
-                        else student_feats[name].reshape(
-                            student_feats[name].size(0), -1
-                        )
-                    ),
-                    (
-                        teacher_feats[name].detach()
-                        if name != "linear"
-                        else teacher_feats[name]
-                        .detach()
-                        .reshape(teacher_feats[name].size(0), -1)
-                    ),
-                )
-                for name in layer_names
-            ]
-        ).mean()
-
-        total_loss = args.alpha * ce_loss + (1.0 - args.alpha) * kd_loss
+        feats_s = {
+            name: (
+                student_feats[name]
+                if name != "linear"
+                else student_feats[name].reshape(student_feats[name].size(0), -1)
+            )
+            for name in layer_names
+        }
+        feats_t = {
+            name: (
+                teacher_feats[name].detach()
+                if name != "linear"
+                else teacher_feats[name]
+                .detach()
+                .reshape(teacher_feats[name].size(0), -1)
+            )
+            for name in layer_names
+        }
 
         if phase < args.student_batches:
+            # no grad for decoders
+            for d in decoders.values():
+                for p in d.parameters():
+                    p.requires_grad_(False)
+            ce_loss = criterion_ce(logits_s, labels)
+            kd_loss = torch.stack(
+                [
+                    elementwise_gaussian_nll(
+                        decoders[name](feats_s[name]),
+                        feats_t[name],
+                    )
+                    for name in layer_names
+                ]
+            ).mean()
+            total_loss = args.alpha * ce_loss + (1.0 - args.alpha) * kd_loss
             opt_student.zero_grad(set_to_none=True)
             total_loss.backward()
             opt_student.step()
             run_loss += total_loss.item() * images.size(0)
             run_ce += ce_loss.item() * images.size(0)
             run_kd += kd_loss.item() * images.size(0)
+            n_samples += images.size(0)
         else:
-            opt_decoder.zero_grad(set_to_none=True)
+            for d in decoders.values():
+                for p in d.parameters():
+                    p.requires_grad_(True)
             kd_detached = torch.stack(
                 [
                     elementwise_gaussian_nll(
-                        decoders[name](
-                            student_feats[name].detach()
-                            if name != "linear"
-                            else student_feats[name]
-                            .detach()
-                            .reshape(student_feats[name].size(0), -1)
-                        ),
-                        (
-                            teacher_feats[name].detach()
-                            if name != "linear"
-                            else teacher_feats[name]
-                            .detach()
-                            .reshape(teacher_feats[name].size(0), -1)
-                        ),
+                        decoders[name](feats_s[name].detach()),
+                        feats_t[name],
                     )
                     for name in layer_names
                 ]
             ).mean()
+            opt_decoder.zero_grad(set_to_none=True)
             kd_detached.backward()
             opt_decoder.step()
 
@@ -314,7 +314,6 @@ for epoch in range(1, args.epochs + 1):
             correct += (preds == labels).sum().item()
     acc = 100.0 * correct / total
 
-    n_samples = len(train_loader.dataset)
     results.append(
         dict(
             epoch=epoch,
@@ -327,6 +326,7 @@ for epoch in range(1, args.epochs + 1):
     print(
         f"Epoch {epoch:03d} | acc {acc:5.2f}% | CE {run_ce/n_samples:.4f} | KD {run_kd/n_samples:.4f} | total {run_loss/n_samples:.4f}"
     )
+
 
 for h in _teacher_hooks + _student_hooks:
     h.remove()
