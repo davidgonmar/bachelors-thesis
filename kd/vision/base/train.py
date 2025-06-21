@@ -208,7 +208,7 @@ student_feats.clear()
 
 criterion_ce = nn.CrossEntropyLoss()
 opt_student = torch.optim.SGD(
-    student.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4
+    student.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4
 )
 opt_decoder = torch.optim.SGD(
     (p for d in decoders.values() for p in d.parameters()),
