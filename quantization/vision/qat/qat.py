@@ -16,6 +16,7 @@ from compress.experiments import (
 from compress.quantization.recipes import get_recipe_quant
 import json
 from compress import seed_everything
+from compress.quantization import separate_params
 
 
 parser = argparse.ArgumentParser(description="PyTorch CIFAR10 QAT Training")
@@ -96,12 +97,16 @@ model = prepare_for_qat(
     fuse_bn_keys=get_fuse_bn_keys(args.model_name),
 ).to(device)
 
+params = separate_params(model)
+
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(
-    model.parameters(),
+    [
+        {"params": params["quant_params"], "weight_decay": 0},
+        {"params": params["others"], "weight_decay": args.weight_decay},
+    ],
     lr=args.lr,
     momentum=args.momentum,
-    weight_decay=args.weight_decay,
 )
 
 epochs = 100

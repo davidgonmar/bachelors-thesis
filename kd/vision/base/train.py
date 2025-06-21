@@ -19,6 +19,7 @@ from compress.quantization import prepare_for_qat
 from compress.quantization.recipes import get_recipe_quant
 import argparse
 import torch.nn.functional as F
+from compress.quantization import separate_params
 
 
 def _attach_feature_hooks(
@@ -207,9 +208,16 @@ teacher_feats.clear()
 student_feats.clear()
 
 criterion_ce = nn.CrossEntropyLoss()
+params = separate_params(student)
 opt_student = torch.optim.SGD(
-    student.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4
+    [
+        {"params": params["quant_params"], "weight_decay": 0},
+        {"params": params["others"], "weight_decay": 5e-4},
+    ],
+    lr=0.001,
+    momentum=0.9,
 )
+
 opt_decoder = torch.optim.SGD(
     (p for d in decoders.values() for p in d.parameters()),
     lr=0.05,
