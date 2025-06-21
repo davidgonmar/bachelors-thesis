@@ -6,7 +6,7 @@ CURDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$DIR"
 
 SEEDS=(0 1 2 3 4)
-ALPHAS=(0.8 0.9 0.95 0.98)
+ALPHAS=(0.8 0.9 0.98 0.95 0.99)
 
 CMDS=()
 for alpha in "${ALPHAS[@]}"; do
@@ -20,7 +20,7 @@ for alpha in "${ALPHAS[@]}"; do
       --val_batch_size 512 \
       --pretrained_path resnet20.pth \
       --student_batches 1 \
-      --matchers_batches 1 \
+      --decoder_batches 1 \
       --alpha \"$alpha\" \
       --seed \"$seed\" \
       --output_path \"$out\"")

@@ -54,6 +54,7 @@ def main():
             raise ValueError(
                 f"Expected {N_SEEDS} seeds for alpha={alpha}, but got {len(accs)}"
             )
+
         mean = statistics.mean(accs)
         std = statistics.pstdev(accs)
         row = f"{alpha} & {mean:.2f} $\\pm$ {std:.2f} \\\\"
